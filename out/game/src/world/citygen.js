@@ -38,5 +38,5 @@ function buildStreetProps(scene,rng){
   // Palm-lined central boulevard makes the waterfront approach legible from street level.
   for(let z=-18;z<=214;z+=32)for(const x of [-13,13]){if(rng()<.17)continue;dummy.position.set(x,4,z);dummy.rotation.set(0,0,0);dummy.scale.set(1,1,1);dummy.updateMatrix();trunks.setMatrixAt(ti++,dummy.matrix);
     for(let k=0;k<6;k++){dummy.position.set(x,8,z);dummy.rotation.set(.06,k*Math.PI/3,Math.PI/2);dummy.scale.set(1,1,1);dummy.updateMatrix();leaves.setMatrixAt(li++,dummy.matrix);}}
-  trunks.count=ti;leaves.count=li;lampPosts.count=pi;bulbs.count=pi;scene.add(trunks,leaves,lampPosts,bulbs);return {trunks,leaves,lampPosts};
+  trunks.count=ti;leaves.count=li;lampPosts.count=pi;bulbs.count=pi;scene.add(trunks,leaves,lampPosts,bulbs);bulbs.userData.nightGlow=true;return {trunks,leaves,lampPosts,bulbs};
 }

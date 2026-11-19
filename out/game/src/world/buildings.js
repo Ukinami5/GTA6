@@ -14,7 +14,7 @@ export function createBuildings(scene,city,seed=1){
     const w=24+rng()*18,d=24+rng()*18,material=windowMaterials[Math.floor(rng()*windowMaterials.length)];
     const building=new THREE.Mesh(box,material);building.scale.set(w,h,d);building.position.set(b.x,h/2,b.z);scene.add(building);colliders.push({minX:b.x-w/2-1,maxX:b.x+w/2+1,minZ:b.z-d/2-1,maxZ:b.z+d/2+1,height:h});
     const roof=new THREE.Mesh(new THREE.BoxGeometry(w+1,1,d+1),new THREE.MeshStandardMaterial({color:district==='hills'?0x6a5448:0x353d3f,roughness:.85}));roof.position.set(b.x,h+.5,b.z);scene.add(roof);
-    if(district==='commercial'&&i%4===0){const sign=new THREE.Mesh(new THREE.BoxGeometry(w*.66,2,.55),new THREE.MeshBasicMaterial({color:i%8?0x30d9d0:0xfa6c9c}));sign.position.set(b.x,h*.62,b.z+d/2+.32);scene.add(sign);const panel=new THREE.Mesh(new THREE.BoxGeometry(w*.66,2,.55),new THREE.MeshBasicMaterial({color:0x20252b}));panel.position.set(b.x,h*.62+.2,b.z+d/2+.22);scene.add(panel);}
+    if(district==='commercial'&&i%4===0){const sign=new THREE.Mesh(new THREE.BoxGeometry(w*.66,2,.55),new THREE.MeshBasicMaterial({color:i%8?0x30d9d0:0xfa6c9c}));sign.position.set(b.x,h*.62,b.z+d/2+.32);sign.userData.nightGlow=true;scene.add(sign);const panel=new THREE.Mesh(new THREE.BoxGeometry(w*.66,2,.55),new THREE.MeshBasicMaterial({color:0x20252b}));panel.position.set(b.x,h*.62+.2,b.z+d/2+.22);scene.add(panel);}
     if(district==='hills'){const pool=new THREE.Mesh(new THREE.BoxGeometry(w*.7,.25,d*.55),new THREE.MeshStandardMaterial({color:0x3ab9ba,metalness:.45,roughness:.18}));pool.position.set(b.x,h+.2,b.z+d*.72);scene.add(pool);}
   });
   // Distinct low marina sheds along the water edge.

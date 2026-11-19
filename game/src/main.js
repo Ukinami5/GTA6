@@ -2,7 +2,7 @@ import * as THREE from 'three';
 import { generateCity } from './world/citygen.js';
 import { createBuildings } from './world/buildings.js';
 import { createOcean, animateOcean } from './world/ocean.js';
-import { createSky } from './world/sky.js';
+import { createSky, setTimeOfDay } from './world/sky.js';
 import { createCar } from './vehicles/carFactory.js';
 import { DrivingController } from './vehicles/driving.js';
 import { createPlayer, PlayerController } from './characters/player.js';
@@ -11,8 +11,11 @@ import { Pedestrians } from './characters/pedestrians.js';
 import { Police } from './characters/police.js';
 import { Wanted } from './systems/wanted.js';
 import { Combat } from './systems/combat.js';
-import { getCash, removeCash } from './systems/economy.js';
+import { getCash, removeCash, addCash } from './systems/economy.js';
 import { HUD } from './ui/hud.js';
+import { Missions } from './missions/missions.js';
+import { readSave, writeSave, clearSave } from './save/savegame.js';
+import { Synth } from './audio/synth.js';
 import { SCENES } from './shots/scenes.js';
 
 const canvas=document.getElementById('view'),renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance'});
@@ -21,9 +24,9 @@ const scene=new THREE.Scene();scene.background=new THREE.Color(0x182d3b);scene.f
 const camera=new THREE.PerspectiveCamera(56,innerWidth/innerHeight,.1,1600);const seed=Number(new URLSearchParams(location.search).get('seed'))||1;
 const city=generateCity(scene,seed);city.colliders.push(...createBuildings(scene,city,seed));const ocean=createOcean(scene),sky=createSky(scene);
 const player=createPlayer();scene.add(player);
-const marina = new THREE.Vector3(3,0,15);
+const marina = new THREE.Vector3(3,0,218);
 const car = createCar('sports',0xf06c59), second = createCar('sedan',0x34bfc0);
-car.position.set(10,0,15);
+car.position.set(8,0,236);car.userData.owned=true;
 car.userData.name = 'Solstice';
 second.position.set(10,0,-15);
 second.rotation.y = Math.PI*.5;
@@ -40,20 +43,65 @@ function setMarina() {
   player.position.copy(marina);
   player.rotation.y = 0;
   player.userData.legs.forEach(leg => { leg.rotation.x=0; });
-  camera.position.set(3,6,3);
-  camera.lookAt(3,1,18);
+  camera.position.set(3,6,206);
+  camera.lookAt(3,1,221);
 }
-if (showcase) {
-  SCENES[showcase]({sky,camera,player,cars});
-  title.classList.add('hidden');
-  hud.hint.classList.add('hidden');
-  hud.objective.textContent = showcase==='cover' ? 'WEST COAST · PORT SOLANA' : 'MANSION RIDGE · PORT SOLANA';
-  hud.subtitle.textContent = showcase==='cover' ? 'THE CITY NEVER BELONGS TO ANYONE FOR LONG.' : 'A WHOLE CITY IN THE PALM OF YOUR HAND.';
-} else setMarina();
+setMarina();
 
 const traffic = new Traffic(scene,city,seed,player.position,showcase);
 const pedestrians = new Pedestrians(scene,city,seed,player.position,showcase);
 const police = new Police(scene,city), wanted = new Wanted(), combat = new Combat(scene,city);
+const audio = new Synth();
+let dayTime=.72, saveStatus='', respawnMessage='';
+const pause=document.getElementById('pause'),resultOverlay=document.getElementById('mission-result');
+const saved=readSave();document.getElementById('continue-game').classList.toggle('hidden',!saved);
+function clearKeys(){for(const action of Object.keys(keys))keys[action]=false;}
+function saveGame(){
+  const ok=writeSave({game,cash:getCash(),completed:missions.completed,playtime:elapsed,time:dayTime});
+  saveStatus=ok?'Game saved · completed story progress stored.':'Save unavailable · browser storage is blocked.';
+  document.getElementById('save-status').textContent=saveStatus;
+  return ok;
+}
+const missions = new Missions(scene,{game,wanted,hud,audio,veraCar:car,onSave:saveGame,onResult:result=>{
+  state='result';clearKeys();resultOverlay.classList.remove('hidden');
+  document.getElementById('result-label').textContent=result.success?'MISSION COMPLETE':'MISSION FAILED';
+  document.getElementById('result-title').textContent=result.name;
+  document.getElementById('result-detail').textContent=result.success?'Payout +$'+result.payout+' · '+(missions.completed.length===5?'Vera’s story is complete. The city is yours.':missions.completed.length+'/5 jobs complete.')+' '+saveStatus:result.reason+' Return to Vera’s V to retry.';
+}});
+function togglePause(){
+  if(state!=='playing'&&state!=='paused')return;
+  state=state==='paused'?'playing':'paused';pause.classList.toggle('hidden',state!=='paused');clearKeys();audio.effect('click');
+}
+function continueResult(){if(state!=='result')return;missions.continue();resultOverlay.classList.add('hidden');state='playing';audio.effect('click');}
+function mute(){audio.toggle();document.getElementById('mute').textContent='Sound: '+(audio.muted?'Off':'On');}
+function begin(data){
+  audio.start();audio.effect('click');game.exit();wanted.reset();police.reset();combat.reset();
+  removeCash(getCash());addCash(data?data.cash:250);missions.restore(data?.completed||[]);
+  elapsed=data?.playtime||0;dayTime=data?.time??.72;setMarina();
+  if(data){player.position.fromArray(data.position);player.rotation.y=Number.isFinite(data.rotation)?data.rotation:0;
+    if(data.car){const vehicle=createCar(data.car.style,0x46b9b0);vehicle.position.fromArray(data.car.position);
+      vehicle.rotation.y=Number.isFinite(data.car.rotation)?data.car.rotation:0;
+      Object.assign(vehicle.userData,{name:data.car.name||'Solstice',owned:true});scene.add(vehicle);city.cars.push(vehicle);
+      vehicle.userData.controller=new DrivingController(vehicle,camera,city.colliders);
+      game.car=vehicle;game.drive=vehicle.userData.controller;player.visible=false;player.position.copy(vehicle.position);}
+    camera.position.copy(player.position).add(new THREE.Vector3(0,6,-12));}
+  setTimeOfDay(sky,dayTime);state='playing';title.classList.add('hidden');
+}
+document.getElementById('new-game').onclick=()=>{clearSave();begin(null);};
+document.getElementById('continue-game').onclick=()=>begin(readSave());
+document.getElementById('resume').onclick=togglePause;
+document.getElementById('save-game').onclick=()=>{audio.effect('click');saveGame();};
+document.getElementById('controls-toggle').onclick=()=>{audio.effect('click');document.getElementById('controls-list').classList.toggle('hidden');};
+document.getElementById('restart').onclick=()=>{respawn(false,true);pause.classList.add('hidden');if(!missions.result)state='playing';};
+document.getElementById('mute').onclick=mute;
+document.getElementById('result-continue').onclick=continueResult;
+if(showcase){
+  SCENES[showcase]({sky,camera,player,cars,police,wanted,missions,game});
+  dayTime=sky.time;title.classList.add('hidden');hud.hint.classList.add('hidden');
+  hud.objective.textContent={cover:'WEST COAST · PORT SOLANA',vista:'MANSION RIDGE · PORT SOLANA',chase:'NEON AVENUE · SHAKE THE PURSUIT',mission:'FIRST ERRAND · COLLECT VERA’S PACKAGE'}[showcase];
+  hud.subtitle.textContent={cover:'THE CITY NEVER BELONGS TO ANYONE FOR LONG.',vista:'A WHOLE CITY IN THE PALM OF YOUR HAND.',chase:'KAI: JUST ONE MORE TURN.',mission:'VERA: Welcome to The Gilded Conch, Kai. Every tide brings someone new.'}[showcase];
+  missions.marker.visible=showcase==='mission';missions.hails.forEach(p=>p.model.visible=false);
+}
 const aimRay = new THREE.Raycaster(), ground = new THREE.Plane(new THREE.Vector3(0,1,0),-1.36);
 function attack(event) {
   if (state!=='playing' || game.car) return;
@@ -63,6 +111,7 @@ function attack(event) {
     aimRay.setFromCamera(pointer,camera);
     aim = aimRay.ray.intersectPlane(ground,new THREE.Vector3());
   }
+  if(!combat.cooldown)audio.effect(combat.armed?'shot':'punch');
   combat.attack(game,pedestrians,police,wanted,aim);
 }
 function interact() {
@@ -76,7 +125,8 @@ function interact() {
     wanted.crime();
   });
 }
-function respawn(busted) {
+function respawn(busted,restart=false) {
+  missions.fail(restart?'Kai left the job.':busted?'Kai was busted.':'Kai was wasted.');
   game.exit();
   setMarina();
   game.motion = 0;
@@ -85,7 +135,7 @@ function respawn(busted) {
   combat.reset();
   const loss = Math.round(getCash()*(busted ? .15 : .10));
   removeCash(loss);
-  hud.subtitle.textContent = (busted ? 'BUSTED' : 'WASTED')+' · −$'+loss+' · BACK AT THE MARINA';
+  respawnMessage = (restart ? 'RESTART' : busted ? 'BUSTED' : 'WASTED')+' · −$'+loss+' · BACK AT THE MARINA';
   notice = 4;
 }
 const bindings = {w:'forward',arrowup:'forward',s:'back',arrowdown:'back',a:'left',arrowleft:'left',
@@ -97,12 +147,9 @@ addEventListener('keydown',event => {
     if (state==='playing') keys[bindings[key]]=true;
   }
   if (event.repeat) return;
-  if (key==='escape' && (state==='playing' || state==='paused')) {
-    state = state==='paused' ? 'playing' : 'paused';
-    hud.subtitle.textContent = state==='paused' ? 'PAUSED · PRESS ESC TO RESUME' : '';
-    notice=0;
-    for (const action of Object.keys(keys)) keys[action]=false;
-  }
+  if(key==='m'){mute();return;}
+  if(key==='escape')togglePause();
+  if(key==='enter'&&state==='result')continueResult();
   if (state!=='playing') return;
   if (key==='e') interact();
   if (key==='q' && !game.car) combat.armed = !combat.armed;
@@ -114,7 +161,7 @@ addEventListener('keyup',event => {
 });
 addEventListener('blur',() => { for (const action of Object.keys(keys)) keys[action]=false; });
 canvas.addEventListener('pointerdown',event => { if (event.button===0) attack(event); });
-title.addEventListener('click',() => { state='playing'; title.classList.add('hidden'); });
+
 addEventListener('resize',() => {
   camera.aspect=innerWidth/innerHeight;
   camera.updateProjectionMatrix();
@@ -126,6 +173,7 @@ function frame(now) {
   last = now;
   if (state==='playing') {
     elapsed += dt;
+    dayTime=(dayTime+dt/720)%1;setTimeOfDay(sky,dayTime);
     game.update(dt,keys);
     camera.updateMatrixWorld();
     traffic.update(dt,player.position,camera);
@@ -135,14 +183,20 @@ function frame(now) {
     if (!combat.health || busted) respawn(busted && combat.health>0);
     wanted.update(dt,player.position,police.units.map(unit => unit.car));
     if (!wanted.level && police.units.length) police.reset();
-    if (notice>0 && (notice-=dt)<=0) hud.subtitle.textContent='';
+    if(state==='playing')missions.update(dt);
+    if(notice>0){notice-=dt;if(notice>0)hud.subtitle.textContent=respawnMessage;}
   }
+  audio.update(game,police,state==='playing');
   animateOcean(ocean,elapsed);
   hud.update(game.car || player,{
     driving:!!game.car, health:combat.health, cash:getCash(), wanted:wanted.level,
     nearby:state==='playing' && !game.car ? game.nearestCar() : null,
-    armed:combat.armed, people:pedestrians.people, blink:Math.floor(police.clock*8)%2, shot:showcase
+    armed:combat.armed, people:pedestrians.people, blink:Math.floor(police.clock*8)%2, shot:showcase,
+    blips:missions.blips,objective:missions.objective,time:dayTime
   });
   renderer.render(scene,camera);
+  document.documentElement.dataset.ready='true';
 }
 requestAnimationFrame(frame);
+
+export { game, missions, wanted, police, combat, audio, saveGame, begin };
