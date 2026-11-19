@@ -18,6 +18,6 @@ export function createBuildings(scene,city,seed=1){
     if(district==='hills'){const pool=new THREE.Mesh(new THREE.BoxGeometry(w*.7,.25,d*.55),new THREE.MeshStandardMaterial({color:0x3ab9ba,metalness:.45,roughness:.18}));pool.position.set(b.x,h+.2,b.z+d*.72);scene.add(pool);}
   });
   // Distinct low marina sheds along the water edge.
-  for(let i=0;i<12;i++){const x=-230+i*42;const shed=new THREE.Mesh(new THREE.BoxGeometry(27,7,18),new THREE.MeshStandardMaterial({color:i%2?0xb28e68:0x839790,roughness:.9}));shed.position.set(x,3.5,220);scene.add(shed);}
+  for(let i=0;i<12;i++){const x=-230+i*42;const shed=new THREE.Mesh(new THREE.BoxGeometry(27,7,18),new THREE.MeshStandardMaterial({color:i%2?0xb28e68:0x839790,roughness:.9}));shed.position.set(x,3.5,220);scene.add(shed);colliders.push({minX:x-13.5,maxX:x+13.5,minZ:211,maxZ:229,height:7});}
   return colliders;
 }
