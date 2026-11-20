@@ -1,4 +1,5 @@
 import * as THREE from 'three';
+import { damageVehicle } from '../vehicles/driving.js';
 import { CITY } from '../config.js';
 import { createCar } from '../vehicles/carFactory.js';
 
@@ -139,7 +140,8 @@ export class Police {
         if (!unit.cooldown && (unit.speed>4 || Math.abs(game.drive.speed)>5)) {
           unit.cooldown=1.1;
           game.drive.speed *= .67;
-          damage(12);
+          damageVehicle(game.car,9);
+          damage(6);
         }
       } else if (!game.car && gap<2.65 && game.motion>=.75 && !unit.cooldown) {
         unit.cooldown=.9;

@@ -11,13 +11,9 @@ export class Traffic {
     this.city = city;
     this.random = seededRandom(seed + 17);
     this.routes = [];
-    const xs = city.roads.filter(r => r.axis === 'z').map(r => r.x);
-    const zs = city.roads.filter(r => r.axis === 'x').map(r => r.z);
-    for (let i = 1; i < xs.length; i++) for (let j = 1; j < zs.length; j++) {
-      const x = xs[i-1] + lane, z = zs[j-1] + lane;
-      const right = xs[i] - lane, bottom = zs[j] - lane;
-      this.routes.push([[x,z], [right,z], [right,bottom], [x,bottom]]
-        .map(([a,b]) => new THREE.Vector3(a,0,b)));
+    // Long clockwise lane loops cross several districts; every leg stays on a road.
+    for(const [left,right,top,bottom] of [[0,210,-210,210],[-210,210,-210,140],[-140,140,-280,70],[-70,280,-140,140],[-280,70,-210,70]]){
+      this.routes.push([[left+lane,top+lane],[right-lane,top+lane],[right-lane,bottom-lane],[left+lane,bottom-lane]].map(([x,z])=>new THREE.Vector3(x,0,z)));
     }
     this.units = [];
     this.frustum = new THREE.Frustum();
@@ -35,12 +31,12 @@ export class Traffic {
     if (!shot) {
       // A northbound lane puts the first occupied car within reach of the marina spawn.
       const first = this.units[0];
-      first.route = this.routes.find(route => route[0].x === lane && route[0].z === lane);
-      this.place(first, first.route, 0, 49);
+      first.route = this.routes[0];
+      this.place(first, first.route, 0, 10);first.wait=6;
     }
   }
   place(unit, route, end, offset) {
-    const start = route[(end+3)%4], target = route[end];
+    const start = route[(end+route.length-1)%route.length], target = route[end];
     const dir = target.clone().sub(start).normalize();
     unit.car.position.copy(start).addScaledVector(dir, offset);
     unit.car.rotation.y = Math.atan2(dir.x, dir.z);
@@ -51,7 +47,7 @@ export class Traffic {
     for (let i = 0; i < 100; i++) {
       const route = this.routes[Math.floor(this.random() * this.routes.length)];
       const end = Math.floor(this.random()*4), offset = 9 + this.random()*45;
-      const point = route[(end+3)%4].clone().lerp(route[end], offset / route[0].distanceTo(route[1]));
+      const point = route[(end+route.length-1)%route.length].clone().lerp(route[end], offset / route[(end+route.length-1)%route.length].distanceTo(route[end]));
       if (point.distanceTo(origin) > radius) continue;
       if (offscreen && (point.distanceTo(origin) < 95 || this.frustum.containsPoint(point))) continue;
       if (this.city.cars.some(car => car.position.distanceToSquared(point) < 9 ** 2)) continue;

@@ -51,6 +51,9 @@ export class HUD {
     c.closePath();
     c.fill();
     c.restore();
+    const damage=document.getElementById('vehicle-health');damage.classList.toggle('hidden',!driving);
+    damage.querySelector('i').style.width=(actor.userData.health??100)+'%';
+    damage.setAttribute('aria-label','Vehicle health '+Math.round(actor.userData.health??100)+' percent');
     this.cash.textContent = '$ '+cash.toLocaleString('en-US');
     this.health.style.width = health+'%';
     this.stars.textContent = '★'.repeat(wanted)+'☆'.repeat(5-wanted);
@@ -60,7 +63,7 @@ export class HUD {
     if (shot) return;
     this.objective.textContent = objective || (driving ? 'VEHICLE · '+actor.userData.name :
       'FREE ROAM · '+(armed ? 'PISTOL' : 'FISTS'));
-    this.prompt.textContent = driving ? 'Press E to exit' : nearby ?
+    this.prompt.textContent = driving ? (actor.userData.health===0?'ENGINE DISABLED · E to exit · find another car':'Press E to exit') : nearby ?
       (nearby.userData.owned ? 'Press E to enter' : 'Press E to steal')+' · '+nearby.userData.name : '';
   }
 }

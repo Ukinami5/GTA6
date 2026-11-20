@@ -20,7 +20,7 @@ export class PlayerController {
     let nearest = null, distance = 5;
     for (const car of this.world.cars) {
       const d = car.position.distanceTo(this.player.position);
-      if (d < distance) { distance=d; nearest=car; }
+      if (car.userData.health!==0 && d < distance) { distance=d; nearest=car; }
     }
     return nearest;
   }

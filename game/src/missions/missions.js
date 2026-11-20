@@ -34,10 +34,15 @@ export class Missions {
     });
     this.syncMarker();
   }
-  restore(ids=[]) {
+  restore(ids=[],saved=null) {
     this.completed=[];
     for(const mission of STORY){if(ids.includes(mission.id))this.completed.push(mission.id);else break;}
-    this.active=null;this.result=null;this.taxi=null;this.queue=[];this.speech=0;this.armed=true;
+    this.clearPassenger();this.active=null;this.result=null;this.taxi=null;this.queue=[];this.speech=0;this.armed=true;
+    const mission=STORY[this.completed.length];
+    if(saved && mission?.id===saved.id && Number.isInteger(saved.step) && saved.step>=0 && saved.step<mission.objectives.length){
+      this.active=mission;this.step=saved.step;this.visited=Array.from({length:this.step},(_,i)=>i);this.hold=1;
+      this.timer=Number.isFinite(saved.timer)?Math.max(.1,Math.min(130,saved.timer)):mission.objectives[this.step].timer??null;
+    }
     this.hails.forEach(p=>p.model.visible=true);this.syncMarker();
   }
   say(lines) {this.queue.push(...lines);}
@@ -49,27 +54,39 @@ export class Missions {
   }
   start() {
     if(this.active||this.taxi||this.result||this.completed.length>=STORY.length)return;
-    this.active=STORY[this.completed.length];this.step=0;this.hold=1.2;this.timer=null;
+    this.active=STORY[this.completed.length];this.step=0;this.visited=[];this.hold=1.2;this.timer=null;
     this.say(this.active.intro);this.audio.effect('click');
     if(this.active.id==='neon-tide'){
       if(this.game.car===this.veraCar)this.game.exit();
       this.veraCar.position.set(8,0,236);this.veraCar.rotation.y=-Math.PI/2;
-      this.veraCar.userData.owned=true;
+      this.veraCar.userData.owned=true;this.veraCar.userData.health=100;
     }
-    this.syncMarker();
+    this.syncMarker();this.onSave();
+  }
+  snapshot() {return this.active?{id:this.active.id,step:this.step,visited:[...this.visited],timer:this.timer}:null;}
+  clearPassenger() {if(this.passenger){this.passenger.removeFromParent();this.passenger=null;}}
+  seatPassenger() {
+    if(!this.taxi)return;
+    if(!this.passenger){this.passenger=this.seatedPassenger||createPlayer(0xffcf67);this.seatedPassenger=this.passenger;this.passenger.scale.setScalar(.64);
+      this.passenger.position.set(-.47,.64,-.1);
+      this.passenger.userData.legs.forEach(leg=>{leg.rotation.x=-Math.PI/2;leg.position.y=.62;leg.position.z=.2;});}
+    if(this.game.car){
+      if(this.passenger.parent!==this.game.car){this.game.car.add(this.passenger);this.taxi.collisions=this.game.drive.collisions||0;}
+    }
   }
   finish(success,reason='') {
     if(!this.active)return;
     const mission=this.active;this.active=null;this.timer=null;this.armed=false;
     this.queue=[];this.speech=0;this.hud.subtitle.textContent='';
     if(success){this.completed.push(mission.id);addCash(mission.payout);this.audio.effect('cash');this.onSave();}
+    if(!success)this.onSave();
     this.audio.effect(success?'success':'fail');
     this.result={success,name:mission.name,payout:success?mission.payout:0,reason};
     this.syncMarker();this.onResult(this.result);
   }
   fail(reason) {
     this.finish(false,reason);
-    if(this.taxi){this.hails[this.taxi.index].model.visible=true;this.taxi=null;this.taxiCooldown=10;this.syncMarker();}
+    if(this.taxi){this.clearPassenger();this.hails[this.taxi.index].model.visible=true;this.taxi=null;this.taxiCooldown=10;this.syncMarker();}
   }
   continue() {this.result=null;this.syncMarker();}
   update(dt) {
@@ -85,13 +102,13 @@ export class Missions {
       if(this.timer!==null){this.timer-=dt;if(this.timer<=0){this.finish(false,'The delivery window closed.');return;}}
       this.hold=Math.max(0,this.hold-dt);
       if(!this.hold && position.distanceTo(this.marker.position)<9 && (!objective.car||this.game.car) &&
-        (objective.type!=='vehicle'||this.game.car===this.veraCar) && (objective.type!=='lose'||!this.wanted.level)){
+        (objective.type!=='vehicle'||this.game.car===this.veraCar||this.veraCar.userData.health===0) && (objective.type!=='lose'||!this.wanted.level)){
         if(objective.heat){while(this.wanted.level<objective.heat)this.wanted.crime();}
         if(objective.line)this.say([objective.line]);
-        this.audio.effect('click');this.step++;this.hold=1;
+        this.audio.effect('click');this.visited.push(this.step);this.step++;this.hold=1;
         if(this.step>=this.active.objectives.length){this.finish(true);return;}
         const next=this.active.objectives[this.step];if(next.timer)this.timer=next.timer;
-        this.syncMarker();
+        this.syncMarker();this.onSave();
       }
     }else if(!this.taxi && this.armed && this.completed.length<STORY.length && position.distanceTo(this.marker.position)<9){this.start();}
     this.updateTaxi(dt);
@@ -100,6 +117,7 @@ export class Missions {
     this.taxiCooldown=Math.max(0,this.taxiCooldown-dt);
     if(this.active||this.result)return;
     if(this.taxi){
+      this.seatPassenger();
       const speed=Math.abs(this.game.drive?.speed||0);
       const collision=(this.game.drive?.collisions||0)!==this.taxi.collisions || this.game.world.cars.some(c=>c!==this.game.car&&c.position.distanceToSquared(this.game.player.position)<12);
       if(collision)this.taxi.clean=false;
@@ -107,7 +125,7 @@ export class Missions {
       if(this.game.player.position.distanceTo(this.marker.position)<9 && speed<7){
         const fare=this.taxi.fare+(this.taxi.clean?40:0);addCash(fare);this.audio.effect('cash');
         this.say([['Passenger','Here is $'+fare+'. '+(this.taxi.clean?'Smooth ride. Keep the tip!':'Made it in one piece, at least.')]]);
-        this.hails[this.taxi.index].model.visible=true;this.taxi=null;this.taxiCooldown=12;this.syncMarker();
+        this.clearPassenger();this.hails[this.taxi.index].model.visible=true;this.taxi=null;this.taxiCooldown=12;this.syncMarker();
       }
     }else if(this.game.car && !this.taxiCooldown && Math.abs(this.game.drive.speed)<7){
       const index=this.hails.findIndex(p=>p.model.position.distanceTo(this.game.player.position)<11);
@@ -115,11 +133,13 @@ export class Missions {
       const hail=this.hails[index],distance=this.game.player.position.distanceTo(new THREE.Vector3(hail.destination[0],0,hail.destination[1]));
       hail.model.visible=false;
       this.taxi={index,destination:hail.destination,fare:Math.round(45+distance*.65),clean:true,collisions:this.game.drive.collisions||0};
+      this.seatPassenger();
       this.say([['Passenger','Taxi! Take me to the marked stop. There is a tip for a smooth ride.']]);this.syncMarker();
     }
   }
   get objective() {
     if(this.active){const step=this.active.objectives[this.step];return this.active.name+' · '+step.label+(this.timer!==null?' · '+Math.ceil(this.timer)+'s':'')+(step.car&&!this.game.car?' · GET A CAR':'');}
+    if(this.taxi&&!this.game.car)return 'TAXI · Passenger waiting · GET A CAR';
     if(this.taxi)return 'TAXI · Deliver passenger · $'+this.taxi.fare+' + $40 clean ride tip';
     return this.completed.length<STORY.length?'VERA · V at The Gilded Conch · '+(this.completed.length+1)+'/5':'STORY COMPLETE · Port Solana is yours · find yellow ! taxi fares';
   }

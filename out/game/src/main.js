@@ -4,6 +4,7 @@ import { createBuildings } from './world/buildings.js';
 import { createOcean, animateOcean } from './world/ocean.js';
 import { createSky, setTimeOfDay } from './world/sky.js';
 import { createCar } from './vehicles/carFactory.js';
+import { updateVehicleHealth } from './vehicles/driving.js';
 import { DrivingController } from './vehicles/driving.js';
 import { createPlayer, PlayerController } from './characters/player.js';
 import { Traffic } from './vehicles/traffic.js';
@@ -57,8 +58,8 @@ const pause=document.getElementById('pause'),resultOverlay=document.getElementBy
 const saved=readSave();document.getElementById('continue-game').classList.toggle('hidden',!saved);
 function clearKeys(){for(const action of Object.keys(keys))keys[action]=false;}
 function saveGame(){
-  const ok=writeSave({game,cash:getCash(),completed:missions.completed,playtime:elapsed,time:dayTime});
-  saveStatus=ok?'Game saved · completed story progress stored.':'Save unavailable · browser storage is blocked.';
+  const ok=writeSave({game,cash:getCash(),completed:missions.completed,playtime:elapsed,time:dayTime,mission:missions.snapshot()});
+  saveStatus=ok?'Game saved · mission objective and story progress stored.':'Save unavailable · browser storage is blocked.';
   document.getElementById('save-status').textContent=saveStatus;
   return ok;
 }
@@ -76,12 +77,12 @@ function continueResult(){if(state!=='result')return;missions.continue();resultO
 function mute(){audio.toggle();document.getElementById('mute').textContent='Sound: '+(audio.muted?'Off':'On');}
 function begin(data){
   audio.start();audio.effect('click');game.exit();wanted.reset();police.reset();combat.reset();
-  removeCash(getCash());addCash(data?data.cash:250);missions.restore(data?.completed||[]);
+  removeCash(getCash());addCash(data?data.cash:250);missions.restore(data?.completed||[],data?.mission);
   elapsed=data?.playtime||0;dayTime=data?.time??.72;setMarina();
   if(data){player.position.fromArray(data.position);player.rotation.y=Number.isFinite(data.rotation)?data.rotation:0;
-    if(data.car){const vehicle=createCar(data.car.style,0x46b9b0);vehicle.position.fromArray(data.car.position);
+    if(data.car){const vehicle=data.car.vera?car:createCar(data.car.style,0x46b9b0);vehicle.position.fromArray(data.car.position);
       vehicle.rotation.y=Number.isFinite(data.car.rotation)?data.car.rotation:0;
-      Object.assign(vehicle.userData,{name:data.car.name||'Solstice',owned:true});scene.add(vehicle);city.cars.push(vehicle);
+      Object.assign(vehicle.userData,{name:data.car.name||'Solstice',owned:true});vehicle.userData.health=Number.isFinite(data.car.health)?THREE.MathUtils.clamp(data.car.health,0,100):100;scene.add(vehicle);if(!city.cars.includes(vehicle))city.cars.push(vehicle);
       vehicle.userData.controller=new DrivingController(vehicle,camera,city.colliders);
       game.car=vehicle;game.drive=vehicle.userData.controller;player.visible=false;player.position.copy(vehicle.position);}
     camera.position.copy(player.position).add(new THREE.Vector3(0,6,-12));}
@@ -136,7 +137,7 @@ function respawn(busted,restart=false) {
   const loss = Math.round(getCash()*(busted ? .15 : .10));
   removeCash(loss);
   respawnMessage = (restart ? 'RESTART' : busted ? 'BUSTED' : 'WASTED')+' · −$'+loss+' · BACK AT THE MARINA';
-  notice = 4;
+  notice = 4;saveGame();
 }
 const bindings = {w:'forward',arrowup:'forward',s:'back',arrowdown:'back',a:'left',arrowleft:'left',
   d:'right',arrowright:'right',shift:'run',space:'brake'};
@@ -176,6 +177,7 @@ function frame(now) {
     dayTime=(dayTime+dt/720)%1;setTimeOfDay(sky,dayTime);
     game.update(dt,keys);
     camera.updateMatrixWorld();
+    updateVehicleHealth(dt,game);
     traffic.update(dt,player.position,camera);
     pedestrians.update(dt,game,wanted);
     combat.update(dt);
@@ -199,4 +201,4 @@ function frame(now) {
 }
 requestAnimationFrame(frame);
 
-export { game, missions, wanted, police, combat, audio, saveGame, begin };
+export { game, missions, wanted, police, combat, audio, saveGame, begin, traffic };

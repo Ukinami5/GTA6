@@ -8,11 +8,11 @@ export function readSave() {
     return {...data,playtime:Math.max(0,Number(data.playtime)||0),time:Number.isFinite(data.time)?data.time: .72};
   } catch { return null; }
 }
-export function writeSave({game, cash, completed, playtime, time}) {
+export function writeSave({game, cash, completed, playtime, time, mission}) {
   const car=game.car;
-  const data={version:1,cash,completed:[...completed],storyProgress:completed.length,
+  const data={version:1,cash,mission,completed:[...completed],storyProgress:completed.length,
     position:game.player.position.toArray(),rotation:game.player.rotation.y,playtime,time,
-    car:car?{style:car.userData.style,name:car.userData.name,position:car.position.toArray(),rotation:car.rotation.y}:null};
+    car:car?{health:car.userData.health,vera:car===game.world.cars[0],style:car.userData.style,name:car.userData.name,position:car.position.toArray(),rotation:car.rotation.y}:null};
   try { localStorage.setItem(KEY,JSON.stringify(data)); return true; } catch { return false; }
 }
 export function clearSave() { try { localStorage.removeItem(KEY); return true; } catch { return false; } }
